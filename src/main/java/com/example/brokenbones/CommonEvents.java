@@ -1,8 +1,13 @@
 package com.example.brokenbones;
 
+import java.util.Collection;
+import java.util.List;
+
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -56,43 +61,61 @@ public class CommonEvents {
         }
     }
 
+    // ---------------------------------------------------------------- příkazy
+
+    private static String names(Collection<ServerPlayer> players) {
+        if (players.size() == 1) return players.iterator().next().getGameProfile().getName();
+        return players.size() + " hráčů";
+    }
+
+    private static int doAdd(CommandSourceStack src, Collection<ServerPlayer> players, int amount) {
+        for (ServerPlayer p : players) BoneData.addBones(p, amount);
+        src.sendSuccess(() -> Component.literal("Přičteno zlomených kostí: " + amount
+                + " (" + names(players) + ")"), false);
+        return players.size();
+    }
+
+    private static int doRemove(CommandSourceStack src, Collection<ServerPlayer> players, int amount) {
+        for (ServerPlayer p : players) BoneData.removeBones(p, amount);
+        src.sendSuccess(() -> Component.literal("Odebráno zlomených kostí: " + amount
+                + " (" + names(players) + ")"), false);
+        return players.size();
+    }
+
+    private static int doPerHit(CommandSourceStack src, Collection<ServerPlayer> players, int amount) {
+        for (ServerPlayer p : players) BoneData.setPerHit(p, amount);
+        src.sendSuccess(() -> Component.literal("Za každý hit se nyní přičte kostí: " + amount
+                + " (" + names(players) + ")"), false);
+        return players.size();
+    }
+
+    private interface Action {
+        int run(CommandSourceStack src, Collection<ServerPlayer> players, int amount);
+    }
+
+    /**
+     * /<name> <číslo>                  -> pro sebe (bez omezení)
+     * /<name> <hráči> <číslo>          -> pro ostatní (jen operátoři, level 2)
+     */
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> build(
+            String name, Action action) {
+        return Commands.literal(name)
+                .then(Commands.argument("amount", IntegerArgumentType.integer(0, MAX))
+                        .executes(ctx -> action.run(ctx.getSource(),
+                                List.of(ctx.getSource().getPlayerOrException()),
+                                IntegerArgumentType.getInteger(ctx, "amount"))))
+                .then(Commands.argument("players", EntityArgument.players())
+                        .requires(s -> s.hasPermission(2))
+                        .then(Commands.argument("amount", IntegerArgumentType.integer(0, MAX))
+                                .executes(ctx -> action.run(ctx.getSource(),
+                                        EntityArgument.getPlayers(ctx, "players"),
+                                        IntegerArgumentType.getInteger(ctx, "amount")))));
+    }
+
     @SubscribeEvent
     public static void onCommands(RegisterCommandsEvent e) {
-        // /bonesperhit <číslo> - kolik kostí se přičte za 1 hit
-        e.getDispatcher().register(Commands.literal("bonesperhit")
-                .then(Commands.argument("amount", IntegerArgumentType.integer(0, MAX))
-                        .executes(ctx -> {
-                            ServerPlayer p = ctx.getSource().getPlayerOrException();
-                            int amount = IntegerArgumentType.getInteger(ctx, "amount");
-                            BoneData.setPerHit(p, amount);
-                            ctx.getSource().sendSuccess(
-                                    () -> Component.literal("Za každý hit se nyní přičte kostí: " + amount), false);
-                            return 1;
-                        })));
-
-        // /removebones <číslo> - odebere kosti (nejméně na 0)
-        e.getDispatcher().register(Commands.literal("removebones")
-                .then(Commands.argument("amount", IntegerArgumentType.integer(0, MAX))
-                        .executes(ctx -> {
-                            ServerPlayer p = ctx.getSource().getPlayerOrException();
-                            int amount = IntegerArgumentType.getInteger(ctx, "amount");
-                            BoneData.removeBones(p, amount);
-                            ctx.getSource().sendSuccess(
-                                    () -> Component.literal("Odebráno zlomených kostí: " + amount
-                                            + " (nyní: " + BoneData.getBones(p) + ")"), false);
-                            return 1;
-                        })));
-
-        // /addbones <číslo> - hned přičte kosti
-        e.getDispatcher().register(Commands.literal("addbones")
-                .then(Commands.argument("amount", IntegerArgumentType.integer(0, MAX))
-                        .executes(ctx -> {
-                            ServerPlayer p = ctx.getSource().getPlayerOrException();
-                            int amount = IntegerArgumentType.getInteger(ctx, "amount");
-                            BoneData.addBones(p, amount);
-                            ctx.getSource().sendSuccess(
-                                    () -> Component.literal("Přičteno zlomených kostí: " + amount), false);
-                            return 1;
-                        })));
+        e.getDispatcher().register(build("addbones", CommonEvents::doAdd));
+        e.getDispatcher().register(build("removebones", CommonEvents::doRemove));
+        e.getDispatcher().register(build("bonesperhit", CommonEvents::doPerHit));
     }
 }
