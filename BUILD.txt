@@ -1,0 +1,8 @@
+LOKALNE (Java 17 nutna):
+  Windows:   gradlew build
+  Mac/Linux: ./gradlew build
+Hotovy mod: build/libs/brokenbones-1.0.0.jar (soubor bez "-sources")
+
+NA GITHUBU (bez instalace):
+  Nahraj celou tuto slozku (vcetne skryte slozky .github) do noveho repozitare.
+  Zalozka Actions -> Build mod -> po dobehnuti stahni artifact "brokenbones-jar".
