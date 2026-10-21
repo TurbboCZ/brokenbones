@@ -6,10 +6,9 @@ import net.minecraft.commands.Commands;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.event.RegisterCommandsEvent;
-import net.minecraftforge.event.entity.living.LivingAttackEvent;
+import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
@@ -19,15 +18,13 @@ public class CommonEvents {
 
     private static final int MAX = 99999999;
 
-    /** Hit = útok od entity (mob, hráč, projektil...). Pád, oheň, hlad apod. se nepočítají. */
+    /**
+     * Spustí se při jakémkoli poškození hráče (mob, pád, oheň, výbuch, hlad...), tedy přesně když
+     * zazní zvuk zranění. Počítá se i když hráči díky absorpci/brnění neubydou srdíčka.
+     */
     @SubscribeEvent
-    public static void onAttack(LivingAttackEvent e) {
+    public static void onHurt(LivingHurtEvent e) {
         if (!(e.getEntity() instanceof ServerPlayer player)) return;
-
-        DamageSource src = e.getSource();
-        if (src.getEntity() == null && src.getDirectEntity() == null) return;
-        if (player.getAbilities().invulnerable) return;       // kreativ
-        if (player.invulnerableTime > 10) return;             // neprobíhající "i-frames" = jeden hit jednou
 
         int perHit = BoneData.getPerHit(player);
         if (perHit <= 0) return;
@@ -70,6 +67,19 @@ public class CommonEvents {
                             BoneData.setPerHit(p, amount);
                             ctx.getSource().sendSuccess(
                                     () -> Component.literal("Za každý hit se nyní přičte kostí: " + amount), false);
+                            return 1;
+                        })));
+
+        // /removebones <číslo> - odebere kosti (nejméně na 0)
+        e.getDispatcher().register(Commands.literal("removebones")
+                .then(Commands.argument("amount", IntegerArgumentType.integer(0, MAX))
+                        .executes(ctx -> {
+                            ServerPlayer p = ctx.getSource().getPlayerOrException();
+                            int amount = IntegerArgumentType.getInteger(ctx, "amount");
+                            BoneData.removeBones(p, amount);
+                            ctx.getSource().sendSuccess(
+                                    () -> Component.literal("Odebráno zlomených kostí: " + amount
+                                            + " (nyní: " + BoneData.getBones(p) + ")"), false);
                             return 1;
                         })));
 
