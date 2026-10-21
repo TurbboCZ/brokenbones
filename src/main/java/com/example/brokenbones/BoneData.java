@@ -37,6 +37,11 @@ public class BoneData {
         sync(p, amount);
     }
 
+    public static void removeBones(ServerPlayer p, int amount) {
+        tag(p).putLong("bones", Math.max(0L, getBones(p) - amount));
+        sync(p, 0);
+    }
+
     public static void sync(ServerPlayer p, int added) {
         BrokenBonesMod.CHANNEL.send(PacketDistributor.PLAYER.with(() -> p),
                 new SyncPacket(getBones(p), added));
